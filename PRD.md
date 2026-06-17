@@ -4,7 +4,7 @@
 Splitting bills in group settings (restaurants, bars, etc.) is often a tedious manual process. Users have to manually transcribe items from a receipt, calculate individual shares, and then apply taxes and service charges proportionally. Current solutions often require all participants to download a specific app or manually enter data into a shared spreadsheet.
 
 ## Solution
-A Telegram Bot that integrates directly into existing group chats. Users can simply upload a photo of a receipt and provide a natural language description of who had what. The bot uses Gemini 1.5 Pro to process the image and text, automatically mapping items to users and providing an interactive "Join" mechanism for shared or unassigned items, finally outputting a clear summary of who owes the payer.
+A Telegram Bot that integrates directly into existing group chats. Users can trigger the bot by uploading a photo of a receipt with a mention (e.g., @SplitBillBot) or by replying to an existing photo with the `/split` command. The bot uses Gemini 1.5 Pro to process the image and text, automatically mapping items to users and providing an interactive "Join" mechanism for shared or unassigned items, finally outputting a clear summary of who owes the payer.
 
 ## User Stories
 1. As a group member, I want to upload a receipt photo to the group chat, so that I can start a split bill session without leaving Telegram.
@@ -16,7 +16,9 @@ A Telegram Bot that integrates directly into existing group chats. Users can sim
 7. As a payer, I want to click a "Finalize" button, so that I can get a final list of amounts owed to me by each person.
 8. As a user, I want the bot to handle mentions like "me" or "I" and map them to the person who sent the photo.
 9. As a user, I want the bot to recognize shared items (e.g., "shared the wings") and split them among all mentioned participants.
-10. As a group admin, I want to be able to use the bot without it tracking every single conversation (Privacy Mode), only responding when a photo or command is sent.
+10. As a group admin, I want to be able to use the bot without it tracking every single conversation (Privacy Mode), by explicitly invoking it via @mentions or commands.
+11. As a user, I want to be able to trigger a split on a previously uploaded photo by replying to it with `/split`.
+12. As a user, I want the bot to handle names without @ handles as "virtual identities" in the summary.
 
 ## Implementation Decisions
 - **Core Engine:** Python with `aiogram` for Telegram API and `google-generativeai` for Gemini 1.5 Pro.

@@ -16,48 +16,64 @@ sessions = SessionManager()
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message):
-    await message.answer("Hi! I'm SplitBillBot. Upload a receipt in a group and describe who had what to start splitting!")
+    await message.answer(
+        "👋 **Welcome to SplitBillBot!**\n\n"
+        "I help you split restaurant bills using AI. No more manual math!\n\n"
+        "Get started by sending a receipt photo or type `/help` for detailed instructions."
+    )
 
-@router.message(F.photo)
-async def handle_receipt(message: types.Message, bot):
-    # Ensure we only process in groups or supergroups as requested
-    if message.chat.type not in ["group", "supergroup"]:
-        # We could allow private chat for testing, but let's stick to the PRD
-        pass
+@router.message(Command("help"))
+async def cmd_help(message: types.Message):
+    await message.answer(
+        "📖 **How to use SplitBillBot**\n\n"
+        "I only respond when explicitly called to ensure your privacy.\n\n"
+        "**1. Upload & Tag**\n"
+        "Upload a receipt and mention me in the caption:\n"
+        "> `@SplitBillBot @Alice had the pizza, I had the salad` \n\n"
+        "**2. Reply to Split**\n"
+        "Forgot the caption? Just reply to any receipt photo with:\n"
+        "> `/split @Bob had the burger` \n\n"
+        "**3. Join the Split**\n"
+        "Others can click the **'Join'** button to share 'unassigned' or 'shared' items.\n\n"
+        "**4. Finalize**\n"
+        "The Payer (who uploaded the photo) clicks **'Finalize'** to get the total amounts owed.\n\n"
+        "💡 *Tip: You can use real names like 'Bob' even if they aren't on Telegram!*"
+    )
 
-    photo = message.photo[-1]
+async def process_receipt_logic(bot, photo_message: types.Message, trigger_message: types.Message, description: str):
+    photo = photo_message.photo[-1]
     file_info = await bot.get_file(photo.file_id)
     file_path = f"temp_{photo.file_id}.jpg"
     await bot.download_file(file_info.file_path, file_path)
 
-    description = message.caption or ""
-    
-    # Extract official mentions
-    mentions = [m.extract_from(description) for m in (message.entities or []) if m.type == "mention"]
-    
+    # Extract official mentions from the trigger message
+    mentions = [m.extract_from(description) for m in (trigger_message.entities or []) if m.type == "mention"]
     # Also extract potential mentions via regex for robustness
     regex_mentions = re.findall(r'@\w+', description)
     all_mentions = list(set(mentions + regex_mentions))
     
-    logging.info(f"Processing receipt from {message.from_user.username}. Mentions: {all_mentions}")
+    logging.info(f"Processing receipt. Payer: {photo_message.from_user.username}. Triggered by: {trigger_message.from_user.username}. Mentions: {all_mentions}")
 
     try:
-        processing_msg = await message.reply("Processing receipt with Gemini...")
+        processing_msg = await trigger_message.reply("Processing receipt with Gemini...")
         bill_data = await gemini.process_receipt(file_path, description, all_mentions)
         
+        # Payer is always the original uploader
         session_id = sessions.create_session(
-            message.chat.id, 
-            message.message_id, 
+            photo_message.chat.id, 
+            photo_message.message_id, 
             bill_data, 
-            message.from_user.id,
-            message.from_user.username
+            photo_message.from_user.id,
+            photo_message.from_user.username
         )
 
         builder = InlineKeyboardBuilder()
         builder.row(types.InlineKeyboardButton(text="🙋 Join Split", callback_data=f"join_{session_id}"))
         builder.row(types.InlineKeyboardButton(text="✅ Finalize", callback_data=f"finalize_{session_id}"))
 
-        text = f"📝 **Bill Detected**\nTotal: {bill_data.get('total'):.2f}\n\n"
+        text = f"📝 **Bill Detected**\nTotal: {bill_data.get('total'):.2f}\n"
+        text += f"Payer: @{photo_message.from_user.username or photo_message.from_user.first_name}\n\n"
+        
         if bill_data.get("unassigned_items"):
             text += "Items to split:\n"
             for item in bill_data["unassigned_items"]:
@@ -68,7 +84,7 @@ async def handle_receipt(message: types.Message, bot):
         await processing_msg.edit_text(text, reply_markup=builder.as_markup())
     except Exception as e:
         logging.error(f"Error processing receipt: {e}")
-        await message.reply(
+        await trigger_message.reply(
             "❌ **Error Processing Receipt**\n"
             "I couldn't parse the receipt correctly. Please ensure:\n"
             "1. The image is clear and well-lit.\n"
@@ -78,6 +94,28 @@ async def handle_receipt(message: types.Message, bot):
     finally:
         if os.path.exists(file_path):
             os.remove(file_path)
+
+@router.message(F.photo)
+async def handle_photo_caption(message: types.Message, bot):
+    # Only process if bot is mentioned in caption
+    me = await bot.get_me()
+    if not message.caption or f"@{me.username}" not in message.caption:
+        return
+
+    await process_receipt_logic(bot, message, message, message.caption)
+
+@router.message(Command("split"))
+async def handle_split_command(message: types.Message, bot):
+    # Check if it's a reply to a photo
+    if not message.reply_to_message or not message.reply_to_message.photo:
+        await message.reply("Please reply to a receipt photo with `/split` to start.")
+        return
+
+    # Text after /split overrides original caption
+    command_text = message.text.replace("/split", "").strip()
+    description = command_text if command_text else (message.reply_to_message.caption or "")
+    
+    await process_receipt_logic(bot, message.reply_to_message, message, description)
 
 @router.callback_query(F.data.startswith("join_"))
 async def handle_join(callback: types.CallbackQuery):

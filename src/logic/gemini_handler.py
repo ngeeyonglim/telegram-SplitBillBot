@@ -29,9 +29,10 @@ class GeminiHandler:
         3. Mapping Rules:
            - "sender" refers to the person who sent the message (keywords: "me", "I", "my").
            - If an item is explicitly linked to a name or "me" (e.g., "Alice had the burger"), assign it to them.
-           - If an item is "shared" and specific names are mentioned, assign it to all of those names.
+           - If a name is mentioned without an "@" (e.g., "Bob had the pizza"), use that name exactly as a virtual identity.
+           - Use the EXACT handles provided in the 'Participants mentioned' list (which start with @) where they match the description.
+           - If an item is "shared" and specific names are mentioned, assign it to all of those names/handles.
            - If an item is "shared" without names, or not mentioned at all, mark it as "unassigned".
-           - Use the EXACT names provided in the 'Participants mentioned' list where applicable.
         
         Constraint: Return ONLY a JSON object. Do not include any markdown formatting or preamble.
         
