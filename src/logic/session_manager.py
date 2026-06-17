@@ -7,14 +7,23 @@ class SessionManager:
         # 5 hours TTL
         self.cache = TTLCache(maxsize=1000, ttl=ttl_seconds)
 
-    def create_session(self, chat_id: int, message_id: int, bill_data: Dict[str, Any], payer_id: int, payer_username: str):
+    def create_session(self, chat_id: int, message_id: int, bill_data: Dict[str, Any], payer_id: int, payer_username: str, mentions: List[str] = None):
         session_id = f"{chat_id}_{message_id}"
+        payer_key = f"@{payer_username}" if payer_username else f"user_{payer_id}"
+        
+        # Initialize joined_users with the payer and any mentioned users
+        joined_users = {payer_key}
+        if mentions:
+            for m in mentions:
+                if m.startswith("@"):
+                    joined_users.add(m)
+        
         self.cache[session_id] = {
             "bill_data": bill_data,
             "payer_id": payer_id,
             "payer_username": payer_username,
-            "participants": {f"@{payer_username}" if payer_username else f"user_{payer_id}": []},
-            "joined_users": set(),
+            "participants": {payer_key: []},
+            "joined_users": joined_users,
             "created_at": time.time()
         }
         return session_id

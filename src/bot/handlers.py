@@ -58,13 +58,18 @@ async def process_receipt_logic(bot, photo_message: types.Message, trigger_messa
         processing_msg = await trigger_message.reply("Processing receipt with Gemini...")
         bill_data = await gemini.process_receipt(file_path, description, all_mentions)
         
+        # Filter out the bot's own mention from the session participants
+        me = await bot.get_me()
+        participant_mentions = [m for m in all_mentions if m.lower() != f"@{me.username}".lower()]
+
         # Payer is always the original uploader
         session_id = sessions.create_session(
             photo_message.chat.id, 
             photo_message.message_id, 
             bill_data, 
             photo_message.from_user.id,
-            photo_message.from_user.username
+            photo_message.from_user.username,
+            mentions=participant_mentions
         )
 
         builder = InlineKeyboardBuilder()
