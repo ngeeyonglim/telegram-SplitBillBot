@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.git/
+.gitignore
+README.md
+PRD.md
+CONTEXT.md
+docs/
+test_logic.py
+*.jpg
+temp_*
