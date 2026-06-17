@@ -1,6 +1,7 @@
 import google.generativeai as genai
 import json
 import os
+import asyncio
 from PIL import Image
 from typing import List, Dict, Any
 
@@ -51,13 +52,20 @@ class GeminiHandler:
         }}
         """
         
-        response = self.model.generate_content([prompt, image])
         try:
+            # Use generate_content_async and wrap in asyncio.wait_for for a 60s timeout
+            response = await asyncio.wait_for(
+                self.model.generate_content_async([prompt, image]),
+                timeout=60.0
+            )
+            
             data = json.loads(response.text)
             # Basic validation
             if "total" not in data or "items" not in data:
                 raise ValueError("Incomplete data received from Gemini.")
             return data
+        except asyncio.TimeoutError:
+            raise Exception("Gemini API timed out after 60 seconds. Please try again with a clearer image or shorter description.")
         except json.JSONDecodeError:
             # Fallback if Gemini includes markdown or other text despite instructions
             text = response.text
