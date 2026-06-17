@@ -9,7 +9,7 @@ class GeminiHandler:
         genai.configure(api_key=api_key)
         # Using a more robust configuration for JSON output
         self.model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash',
+            model_name='gemini-3.5-flash',
             generation_config={"response_mime_type": "application/json"}
         )
 
