@@ -56,7 +56,7 @@ class GeminiHandler:
             # Use generate_content_async and wrap in asyncio.wait_for for a 60s timeout
             response = await asyncio.wait_for(
                 self.model.generate_content_async([prompt, image]),
-                timeout=60.0
+                timeout=180.0
             )
             
             data = json.loads(response.text)
@@ -65,7 +65,7 @@ class GeminiHandler:
                 raise ValueError("Incomplete data received from Gemini.")
             return data
         except asyncio.TimeoutError:
-            raise Exception("Gemini API timed out after 60 seconds. Please try again with a clearer image or shorter description.")
+            raise Exception("Gemini API timed out after 180 seconds. Please try again with a clearer image or shorter description.")
         except json.JSONDecodeError:
             # Fallback if Gemini includes markdown or other text despite instructions
             text = response.text

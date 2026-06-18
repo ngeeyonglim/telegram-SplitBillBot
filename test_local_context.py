@@ -37,7 +37,7 @@ async def test_singlish_and_local_assignment():
         bill_data=bill_data, 
         payer_id=1, 
         payer_username="Yong",
-        mentions=["@AhHock", "@Meiling", "@BotName"]
+        menons=["@AhHock", "@Meiling", "@BotName"]
     )
     
     # Simulate @AhHock and @Meiling joining (though mentions already added them)
