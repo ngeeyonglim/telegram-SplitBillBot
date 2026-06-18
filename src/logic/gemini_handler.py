@@ -2,6 +2,9 @@ import google.generativeai as genai
 import json
 import os
 import asyncio
+import logging
+import time
+import io
 from PIL import Image
 from typing import List, Dict, Any
 
@@ -11,12 +14,35 @@ class GeminiHandler:
         # Using a more robust configuration for JSON output
         self.model = genai.GenerativeModel(
             model_name='gemini-3.5-flash',
-            generation_config={"response_mime_type": "application/json"}
+            generation_config={
+                "response_mime_type": "application/json"
+            }
         )
 
     async def process_receipt(self, image_path: str, user_description: str, mentions: List[str]) -> Dict[str, Any]:
-        image = Image.open(image_path)
+        start_time = time.time()
+        logging.info(f"Starting receipt processing for {image_path}")
         
+        # Prepare image: resize and convert to bytes for faster transmission
+        image = Image.open(image_path)
+        # Convert to RGB if necessary (to avoid issues with RGBA/indexed JPEGs)
+        if image.mode != 'RGB':
+            image = image.convert('RGB')
+            
+        max_dim = 1600
+        if max(image.size) > max_dim:
+            scale = max_dim / max(image.size)
+            new_size = (int(image.size[0] * scale), int(image.size[1] * scale))
+            image = image.resize(new_size, Image.LANCZOS)
+            logging.info(f"Resized image to {new_size}")
+
+        # Save to bytes
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='JPEG', quality=85)
+        img_bytes = img_byte_arr.getvalue()
+        
+        logging.info(f"Image prepared. Size: {len(img_bytes) / 1024:.2f} KB")
+
         prompt = f"""
         Analyze the provided receipt image and the following user description: "{user_description}"
         
@@ -53,22 +79,32 @@ class GeminiHandler:
         """
         
         try:
-            # Use generate_content_async and wrap in asyncio.wait_for for a 60s timeout
-            response = await asyncio.wait_for(
-                self.model.generate_content_async([prompt, image]),
-                timeout=180.0
+            api_start = time.time()
+            logging.info("Sending request to Gemini API (3.5-flash)...")
+            
+            # Use raw bytes and native request_options timeout for better reliability
+            response = await self.model.generate_content_async(
+                [
+                    prompt,
+                    {'mime_type': 'image/jpeg', 'data': img_bytes}
+                ],
+                request_options={'timeout': 300} # 5 minute API-side timeout
             )
+            
+            api_duration = time.time() - api_start
+            logging.info(f"Gemini API responded in {api_duration:.2f}s")
             
             data = json.loads(response.text)
             # Basic validation
             if "total" not in data or "items" not in data:
                 raise ValueError("Incomplete data received from Gemini.")
+            
+            total_duration = time.time() - start_time
+            logging.info(f"Total processing time: {total_duration:.2f}s")
             return data
-        except asyncio.TimeoutError:
-            raise Exception("Gemini API timed out after 180 seconds. Please try again with a clearer image or shorter description.")
-        except json.JSONDecodeError:
-            # Fallback if Gemini includes markdown or other text despite instructions
-            text = response.text
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
-            return json.loads(text.strip())
+        except Exception as e:
+            api_duration = time.time() - api_start
+            logging.error(f"Gemini API error/timeout after {api_duration:.2f}s: {e}")
+            if "deadline exceeded" in str(e).lower() or "timeout" in str(e).lower():
+                raise Exception("The AI took too long to process the image. This usually happens with very complex receipts or high server load. Please try again or use a clearer photo.")
+            raise
